@@ -17,7 +17,7 @@ yes_no_kb_builder.row(button_yes, button_no, width=2)
 
 # Создаем клавиатуру с кнопками "Давай!" и "Не хочу!"
 yes_no_kb: ReplyKeyboardMarkup = yes_no_kb_builder.as_markup(
-    one_time_keyboard=True,
+    one_time_keyboard=True, #то эта клавиатура должна сворачиваться после нажатия пользователя на кнопку с текстом "Не хочу!"
     resize_keyboard=True
 )
 
