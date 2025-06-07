@@ -35,3 +35,4 @@ game_kb = ReplyKeyboardMarkup(
               [button_2],
               [button_3]],
     resize_keyboard=True
+)
