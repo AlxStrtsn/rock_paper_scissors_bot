@@ -1,0 +1,297 @@
+
+-->     config.py
+from dataclasses import dataclass
+from environs import Env
+
+@dataclass
+class TgBot:
+    token: str  # Токен для доступа к телеграм-боту
+
+@dataclass
+class Config:
+    tg_bot: TgBot
+
+def load_config(path: str | None = None) -> Config:
+    env = Env()
+    env.read_env(path)
+    return Config(tg_bot=TgBot(token=env('BOT_TOKEN')))
+
+
+-->     .gitignor
+.venv
+.env
+.mypy_cache/
+.idea/
+venv/
+__pycache__/
+
+
+-->     main.py
+import asyncio
+import logging
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties #DefaultBotProperties из aiogram.client.default позволяет задать параметры бота по умолчанию.
+from aiogram.enums import ParseMode
+from config_data.config import Config, load_config
+from handlers import other_handlers, user_handlers
+
+# Инициализируем логгер
+logger = logging.getLogger(__name__)
+
+
+# Функция конфигурирования и запуска бота
+async def main():
+    # Конфигурируем логирование
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(filename)s:%(lineno)d #%(levelname)-8s '
+               '[%(asctime)s] - %(name)s - %(message)s')
+
+    # Выводим в консоль информацию о начале запуска бота
+    logger.info('Starting bot')
+
+    # Загружаем конфиг в переменную config
+    config: Config = load_config()
+
+    # Инициализируем бот и диспетчер
+    bot = Bot(
+        token=config.tg_bot.token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+    dp = Dispatcher()
+
+    # Регистриуем роутеры в диспетчере
+    dp.include_router(user_handlers.router)
+    dp.include_router(other_handlers.router)
+
+    # Пропускаем накопившиеся апдейты и запускаем polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+
+asyncio.run(main())
+
+
+-->     keyboards.py
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
+
+from lexicon.lexicon_ru import LEXICON_RU
+
+# ------- Создаем клавиатуру через ReplyKeyboardBuilder -------
+
+# Создаем кнопки с ответами согласия и отказа
+button_yes = KeyboardButton(text=LEXICON_RU['yes_button'])
+button_no = KeyboardButton(text=LEXICON_RU['no_button'])
+
+# Инициализируем билдер для клавиатуры с кнопками "Давай" и "Не хочу!"
+yes_no_kb_builder = ReplyKeyboardBuilder()
+
+# Добавляем кнопки в билдер с аргументом width=2
+yes_no_kb_builder.row(button_yes, button_no, width=2)
+
+# Создаем клавиатуру с кнопками "Давай!" и "Не хочу!"
+yes_no_kb: ReplyKeyboardMarkup = yes_no_kb_builder.as_markup(
+    one_time_keyboard=True, #то эта клавиатура должна сворачиваться после нажатия пользователя на кнопку с текстом "Не хочу!"
+    resize_keyboard=True
+)
+
+# ------- Создаем игровую клавиатуру без использования билдера -------
+
+# Создаем кнопки игровой клавиатуры
+button_rock = KeyboardButton(text=LEXICON_RU['rock'])
+button_scissors = KeyboardButton(text=LEXICON_RU['scissors'])
+button_paper = KeyboardButton(text=LEXICON_RU['paper'])
+
+# Создаем игровую клавиатуру с кнопками "Камень 🗿",
+# "Ножницы ✂" и "Бумага 📜" как список списков
+game_kb = ReplyKeyboardMarkup(
+    keyboard=[[button_rock],
+              [button_scissors],
+              [button_paper]],
+    resize_keyboard=True
+)
+
+# Если пользователь нажмет на кнопку "Давай!" -
+# клавиатура yes_no_kb будет заменена на игровую клавиатуру.
+
+# Игровой клавиатуре game_kb параметр one_time_keyboard не нужен,
+# потому что каждый раз, когда пользователь будет делать свой игровой выбор,
+# бот будет сообщать о том, кто победил и присылать клавиатуру yes_no_kb,
+# чтобы узнать у пользователя хочет ли он сыграть еще раз.
+
+# Тексты, которые будут отображаться на кнопках клавиатуры,
+# берем по соответствующим ключам из словаря LEXICON_RU,
+# который предварительно импортируем из модуля lexicon_ru в пакете lexicon.
+
+# Вообще, если в телеграм-боте используется много разных клавиатур - они не хардкодятся как в этом примере.
+# Они создаются на лету специальными функциями, принимающими в качестве параметров количество кнопок,
+# количество рядов, количество кнопок в ряде, тексты, отображаемые на кнопках и т.п.
+# Но здесь клавиатур всего две, поэтому наш подход может считаться оправданным.
+
+
+-->     lexicon_ru.py
+LEXICON_RU: dict[str, str] = {
+    '/start': '<b>Привет!</b>\nДавай с тобой сыграем в игру '
+              '"Камень, ножницы, бумага"?\n\nЕсли ты, вдруг, '
+              'забыл правила, команда /help тебе поможет!\n\n<b>Играем?</b>',
+    '/help': 'Это очень простая игра. Мы одновременно должны '
+             'сделать выбор одного из трех предметов. Камень, '
+             'ножницы или бумага.\n\nЕсли наш выбор '
+             'совпадает - ничья, а в остальных случаях камень '
+             'побеждает ножницы, ножницы побеждают бумагу, '
+             'а бумага побеждает камень.\n\n<b>Играем?</b>',
+    'rock': 'Камень 🗿',
+    'paper': 'Бумага 📜',
+    'scissors': 'Ножницы ✂',
+    'yes_button': 'Давай!',
+    'no_button': 'Не хочу!',
+    'other_answer': 'Извини, увы, это сообщение мне непонятно...',
+    'yes': 'Отлично! Делай свой выбор!',
+    'no': 'Жаль...\nЕсли захочешь сыграть, просто разверни '
+          'клавиатуру и нажми кнопку "Давай!"',
+    'bot_won': 'Я победил!\n\nСыграем еще?',
+    'user_won': 'Ты победил! Поздравляю!\n\nДавай сыграем еще?',
+    'nobody_won': 'Ничья!\n\nПродолжим?',
+    'bot_choice': 'Мой выбор'
+}
+
+
+->      other_handlers.py
+from aiogram import Router
+from aiogram.types import Message
+from lexicon.lexicon_ru import LEXICON_RU
+
+router = Router()
+
+# Хэндлер для сообщений, которые не попали в другие хэндлеры
+@router.message()
+async def send_answer(message: Message):
+    await message.answer(text=LEXICON_RU['other_answer'])
+
+
+->      user_handlers.py
+from aiogram import F, Router
+from aiogram.filters import Command, CommandStart
+from aiogram.types import Message
+from keyboards.keyboards import game_kb, yes_no_kb
+from lexicon.lexicon_ru import LEXICON_RU
+from services.services import get_bot_choice, get_winner
+
+router = Router()
+
+# Этот хэндлер срабатывает на команду /start
+@router.message(CommandStart())
+async def process_start_command(message: Message):
+    await message.answer(text=LEXICON_RU['/start'], reply_markup=yes_no_kb)
+
+
+# Этот хэндлер срабатывает на команду /help
+@router.message(Command(commands='help'))
+async def process_help_command(message: Message):
+    await message.answer(text=LEXICON_RU['/help'], reply_markup=yes_no_kb)
+
+
+# Этот хэндлер срабатывает на согласие пользователя играть в игру
+@router.message(F.text == LEXICON_RU['yes_button'])
+async def process_yes_answer(message: Message):
+    await message.answer(text=LEXICON_RU['yes'], reply_markup=game_kb)
+
+
+# Этот хэндлер срабатывает на отказ пользователя играть в игру
+@router.message(F.text == LEXICON_RU['no_button'])
+async def process_no_answer(message: Message):
+    await message.answer(text=LEXICON_RU['no'])
+
+
+# Этот хэндлер срабатывает на любую из игровых кнопок
+@router.message(F.text.in_([LEXICON_RU['rock'],
+                            LEXICON_RU['paper'],
+                            LEXICON_RU['scissors']]))
+async def process_game_button(message: Message):
+    bot_choice = get_bot_choice()
+    await message.answer(text=f'{LEXICON_RU["bot_choice"]} '
+                              f'- {LEXICON_RU[bot_choice]}')
+    winner = get_winner(message.text, bot_choice)
+    await message.answer(text=LEXICON_RU[winner], reply_markup=yes_no_kb)
+
+
+
+->      services.py
+
+
+
+
+->
+import logging
+Команда import logging в Python импортирует стандартный модуль logging, который позволяет регистрировать события во время работы кода. 
+Этот модуль входит в стандартную библиотеку языка. 
+Основные функции модуля
+Модуль logging поддерживает разные уровни сообщений, например:
+DEBUG — для отладочных сообщений;
+INFO — для информационных сообщений;
+WARNING — для предупреждений;
+ERROR — для сообщений об ошибках;
+CRITICAL — для критических сообщений.
+Сообщения можно выводить в консоль, файл или по электронной почте.
+
+
+->  
+from aiogram.client.default import DefaultBotProperties
+DefaultBotProperties — класс в библиотеке aiogram, который позволяет задать глобальные настройки по умолчанию для всех запросов к API Telegram Bot.
+Например, с помощью этого класса можно указать, как обрабатывать сообщения: в формате HTML или Markdown
+
+->  
+from aiogram.enums import ParseMode
+ParseMode — параметр метода sendMessage в Telegram Bot API, который задаёт режим форматирования текста сообщения. 
+Значения ParseMode:
+HTML. Поддерживает теги для выделения текста жирным и курсивом, а также встроенные ссылки. 
+Markdown. Устаревший режим, сохранён для обратной совместимости. В сообщениях используется специальный синтаксис, например, для выделения текста жирным шрифтом — *. 
+MarkdownV2. Современный режим, поддерживает те же теги, что и HTML, а также позволяет использовать вложенные сущности (например, подчёркнутый текст, спойлер).
+
+->  
+from handlers import other_handlers, user_handlers
+Это импорт модулей other_handlers и user_handlers из файла handlers. 
+В контексте, например, кода бота на языке aiogram, такой импорт позволяет использовать роутеры (хэндлеры), определённые в отдельных файлах, в основном файле бота. Например, в файле main.py может быть код, где регистрируются роутеры из файлов handlers/other_handlers.py и handlers/user_handlers.py
+
+
+#config.py
+from dataclasses import dataclass
+from environs import Env
+
+#«from dataclasses import dataclass» — это импорт декоратора dataclass из модуля dataclasses в языке программирования Python. 
+#Декоратор dataclass позволяет создавать data-классы, которые предназначены для хранения данных и сокращения шаблонного кода классов. 
+#Использование декоратора возможно только в версиях Python 3.7 и выше.
+
+#class RegularBook:
+#    def __init__(self, title, author):
+#        self.title = title
+#       self.author = author
+
+
+#from dataclasses import dataclass
+
+#@dataclass
+#class Book:
+#    title: str
+#    author: str		
+
+
+@dataclass
+class TgBot:
+    token: str  # Токен для доступа к телеграм-боту
+
+@dataclass
+class Config:
+    tg_bot: TgBot
+
+def load_config(path: str | None = None) -> Config:
+    env = Env()                                         # Создаем экземпляр класса Env
+    env.read_env(path)                                  # Методом read_env() читаем файл .env и загружаем из него переменные в окружение 
+    return Config(tg_bot=TgBot(token=env('BOT_TOKEN'))
+
+
+python.exe -m pip install --upgrade pip
+pip install aiogram 
+pip install environs       

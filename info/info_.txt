@@ -1,0 +1,28 @@
+#config.py
+from dataclasses import dataclass
+from environs import Env
+
+#«from dataclasses import dataclass» — это импорт декоратора dataclass из модуля dataclasses в языке программирования Python. 
+#Декоратор dataclass позволяет создавать data-классы, которые предназначены для хранения данных и сокращения шаблонного кода классов. 
+#Использование декоратора возможно только в версиях Python 3.7 и выше.
+
+#class RegularBook:
+#    def __init__(self, title, author):
+#        self.title = title
+#       self.author = author
+
+		
+
+
+@dataclass
+class TgBot:
+    token: str  # Токен для доступа к телеграм-боту
+
+@dataclass
+class Config:
+    tg_bot: TgBot
+
+def load_config(path: str | None = None) -> Config:
+    env = Env()
+    env.read_env(path)
+    return Config(tg_bot=TgBot(token=env('BOT_TOKEN')))
